@@ -1,3 +1,6 @@
 venv/*
 src/anuncio2.py
 .vscode/*
+src/__pycache__
+src/config.py
+src/README.md

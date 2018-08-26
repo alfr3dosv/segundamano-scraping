@@ -1,41 +1,52 @@
-import requests, json
-from anuncio import Anuncio
+import requests, json, datetime as dt
+from models import Anuncio, Imagen
+from session import session
 
-target = 'https://webapi.segundamano.mx/nga/api/v1/public/klfst'
+def buscar(busqueda, pagina):
+    target = 'https://webapi.segundamano.mx/nga/api/v1/public/klfst'
+    resultado_json = requests.get(target, params = {
+        'region': '21',
+        'q': busqueda.replace(' ', '_'),
+        'lim': '29',
+        'offset': str(pagina),
+        'lang': 'es'
+    }).json()
 
-segundamano_request = requests.get(target, params = {
-    'region': '21',
-    'q': 'gato_negro',
-    'lim': '29',
-    'offset': '1',
-    'lang': 'es'
-})
+    anuncios_con_ids = {}
+    for resultado in resultado_json['list_ads']:
+        ad = resultado['ad']
+        id = ad['ad_id']
+        anuncios_con_ids[str(id)] = ad
 
-resultado = segundamano_request.json()
-print(segundamano_request.url)
+    return anuncios_con_ids
 
-def obtener_anuncios(resultado_json):
-    resultado = segundamano_request.json()
-    print(len(resultado['list_ads']))
-    anuncios = []
-
-    for ad in resultado['list_ads']:
-        anuncio = Anuncio()
-        if 'prices' in ad['ad']:
-            anuncio.precio = int(ad['ad']['list_price']['price_value'])
-        anuncio.cuerpo = ad['ad']['body']
-        anuncio.titulo = ad['ad']['subject']
-        anuncio.publicado = ad['ad']['list_time']['value']
-        
-        for imagen in ad['ad']['images']:
-            imagen_link = imagen['base_url'] + '/medium/' + imagen['path']
-            anuncio.imagenes.append(imagen_link)
-
-        anuncios.append(anuncio)
+def insertar_anuncio(ad):
+    anuncio = Anuncio()
+    if 'prices' in ad:
+        anuncio.precio = int(ad['list_price']['price_value'])
+    anuncio.cuerpo = ad['body']
+    anuncio.titulo = ad['subject']
+    anuncio.anuncio_id = ad['ad_id']
+    anuncio.url = ad['share_link']
+    timestamp = int(ad['list_time']['value'])
+    anuncio.publicado = str(dt.datetime.fromtimestamp(timestamp))
     
-    return anuncios
+    session.add(anuncio)
+    session.flush()
 
+    for imagen in obtener_imagenes(ad):
+        imagen.anuncio_id = anuncio.id
+        session.add(imagen)
+    
+    session.commit()
 
-
-for anuncio in obtener_anuncios(resultado):
-    print(anuncio)
+def obtener_imagenes(ad):   
+    imagenes = []
+    if 'images' in ad:
+        imagen = Imagen()
+        for i in ad['images']:
+            imagen_link = i['base_url'] + '/medium/' + i['path']
+            imagen.url = imagen_link
+            imagenes.append(imagen)
+    
+    return imagenes
